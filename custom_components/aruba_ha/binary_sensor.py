@@ -13,6 +13,9 @@ from .const import (
     ATTR_IF_INDEX,
     ATTR_PORT_NUMBER,
     DOMAIN,
+    HPICF_PSU_STATUS_FAULTED,
+    HPICF_PSU_STATUS_REMOVED,
+    HPICF_SENSOR_STATUS_GOOD,
     IF_STATUS_UP,
     PETH_DETECTION_DELIVERING_POWER,
 )
@@ -30,6 +33,10 @@ async def async_setup_entry(
         ArubaPortLinkBinarySensor(coordinator, if_index) for if_index in coordinator.data.ports
     ]
     entities.extend(ArubaPoeDeliveringBinarySensor(coordinator, key) for key in coordinator.data.poe_ports)
+    entities.extend(ArubaHwSensorProblemBinarySensor(coordinator, index) for index in coordinator.data.hw_sensors)
+    entities.extend(
+        ArubaPowerSupplyProblemBinarySensor(coordinator, slot) for slot in coordinator.data.power_supplies
+    )
 
     async_add_entities(entities)
 
@@ -132,3 +139,90 @@ class ArubaPoeDeliveringBinarySensor(ArubaEntity, BinarySensorEntity):
             "admin_enable": poe.admin_enable,
             "power_class": poe.power_class,
         }
+
+
+class ArubaHwSensorProblemBinarySensor(ArubaEntity, BinarySensorEntity):
+    """A generic hardware sensor (typically a fan) from hpicfSensorTable."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_icon = "mdi:fan"
+
+    def __init__(self, coordinator: ArubaDataUpdateCoordinator, index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._index = index
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_hwsensor_{index}"
+
+    @property
+    def _sensor(self):
+        return self.coordinator.data.hw_sensors.get(self._index)
+
+    @property
+    def available(self) -> bool:
+        """Return True if this hardware sensor is still reported."""
+        return super().available and self._sensor is not None
+
+    @property
+    def name(self) -> str:
+        """Return the entity name."""
+        sensor = self._sensor
+        return sensor.descr if sensor else f"Capteur {self._index}"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the sensor reports a problem (not 'good')."""
+        sensor = self._sensor
+        if not sensor or sensor.status is None:
+            return None
+        return sensor.status != HPICF_SENSOR_STATUS_GOOD
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return the raw sensor status."""
+        sensor = self._sensor
+        if not sensor:
+            return {}
+        return {"status": sensor.status}
+
+
+class ArubaPowerSupplyProblemBinarySensor(ArubaEntity, BinarySensorEntity):
+    """A power supply unit from hpicfPowerSupplyTable."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_icon = "mdi:power-plug-outline"
+
+    def __init__(self, coordinator: ArubaDataUpdateCoordinator, slot: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._slot = slot
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_psu_{slot}"
+
+    @property
+    def _psu(self):
+        return self.coordinator.data.power_supplies.get(self._slot)
+
+    @property
+    def available(self) -> bool:
+        """Return True if this power supply slot is still reported."""
+        return super().available and self._psu is not None
+
+    @property
+    def name(self) -> str:
+        """Return the entity name."""
+        return f"Alimentation {self._slot}"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the power supply is faulted or removed."""
+        psu = self._psu
+        if not psu or psu.status is None:
+            return None
+        return psu.status in (HPICF_PSU_STATUS_FAULTED, HPICF_PSU_STATUS_REMOVED)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return the raw PSU status."""
+        psu = self._psu
+        if not psu:
+            return {}
+        return {"status": psu.status}

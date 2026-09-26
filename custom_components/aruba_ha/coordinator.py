@@ -4,10 +4,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+import re
 
 from .const import (
     CONF_ENABLE_DEVICE_TRACKER,
@@ -15,7 +18,15 @@ from .const import (
     OID_DOT1D_BASE_PORT_IF_INDEX,
     OID_DOT1D_TP_FDB_PORT,
     OID_DOT1D_TP_FDB_STATUS,
-    OID_HPICF_POE_PORT_POWER,
+    OID_HP_GLOBAL_MEM_FREE_BYTES,
+    OID_HP_GLOBAL_MEM_TOTAL_BYTES,
+    OID_HP_SWITCH_CPU_STAT,
+    OID_HP_SYSTEM_AIR_CURRENT_TEMP,
+    OID_HP_SYSTEM_AIR_NAME,
+    OID_HPICF_POE_PORT_ACTUAL_POWER,
+    OID_HPICF_POWER_SUPPLY_STATUS,
+    OID_HPICF_SENSOR_DESCR,
+    OID_HPICF_SENSOR_STATUS,
     OID_IF_ALIAS,
     OID_IF_DESCR,
     OID_IF_ADMIN_STATUS,
@@ -77,6 +88,32 @@ class FdbEntry:
 
 
 @dataclass
+class HwSensorData:
+    """A generic hardware sensor (typically a fan) from hpicfSensorTable."""
+
+    index: int
+    descr: str
+    status: int | None
+
+
+@dataclass
+class PowerSupplyData:
+    """A power supply unit from hpicfPowerSupplyTable."""
+
+    slot: int
+    status: int | None
+
+
+@dataclass
+class TemperatureSensorData:
+    """A temperature probe from hpSystemAirTempTable."""
+
+    index: int
+    name: str | None
+    celsius: float | None
+
+
+@dataclass
 class ArubaSwitchData:
     """Full snapshot of the switch, refreshed on every coordinator update."""
 
@@ -88,6 +125,13 @@ class ArubaSwitchData:
     poe_ports: dict[tuple[int, int], PoePortData] = field(default_factory=dict)
     poe_total_watts: float | None = None
     fdb: list[FdbEntry] = field(default_factory=list)
+    cpu_percent: int | None = None
+    mem_total_bytes: int | None = None
+    mem_free_bytes: int | None = None
+    mem_used_percent: float | None = None
+    hw_sensors: dict[int, HwSensorData] = field(default_factory=dict)
+    power_supplies: dict[int, PowerSupplyData] = field(default_factory=dict)
+    temperatures: dict[int, TemperatureSensorData] = field(default_factory=dict)
 
 
 class ArubaDataUpdateCoordinator(DataUpdateCoordinator[ArubaSwitchData]):
@@ -136,6 +180,7 @@ class ArubaDataUpdateCoordinator(DataUpdateCoordinator[ArubaSwitchData]):
 
         await self._async_fetch_ports(data)
         await self._async_fetch_poe(data)
+        await self._async_fetch_health(data)
 
         if self.enable_device_tracker:
             await self._async_fetch_fdb(data)
@@ -181,7 +226,7 @@ class ArubaDataUpdateCoordinator(DataUpdateCoordinator[ArubaSwitchData]):
 
         detection = await self.client.async_walk(OID_PETH_PSE_PORT_DETECTION_STATUS)
         power_class = await self.client.async_walk(OID_PETH_PSE_PORT_POWER_CLASS)
-        power_watts = await self.client.async_walk(OID_HPICF_POE_PORT_POWER)
+        actual_power_mw = await self.client.async_walk(OID_HPICF_POE_PORT_ACTUAL_POWER)
 
         port_by_number = {
             port.port_number: port.if_index for port in data.ports.values() if port.port_number is not None
@@ -194,19 +239,70 @@ class ArubaDataUpdateCoordinator(DataUpdateCoordinator[ArubaSwitchData]):
             except ValueError:
                 continue
 
+            watts_mw = actual_power_mw.get(suffix)
             data.poe_ports[(group, port)] = PoePortData(
                 group=group,
                 port=port,
                 admin_enable=bool(enabled),
                 detection_status=detection.get(suffix),
                 power_class=power_class.get(suffix),
-                power_watts=_normalize_poe_watts(power_watts.get(suffix)),
+                power_watts=watts_mw / 1000 if isinstance(watts_mw, int) else None,
                 if_index=port_by_number.get(port),
             )
 
         main_power = await self.client.async_get_many([OID_PETH_MAIN_PSE_CONSUMPTION_POWER])
         consumption_mw = main_power.get(OID_PETH_MAIN_PSE_CONSUMPTION_POWER)
         data.poe_total_watts = consumption_mw / 1000 if isinstance(consumption_mw, int) else None
+
+    async def _async_fetch_health(self, data: ArubaSwitchData) -> None:
+        scalars = await self.client.async_get_many([OID_HP_SWITCH_CPU_STAT])
+        cpu = scalars.get(OID_HP_SWITCH_CPU_STAT)
+        data.cpu_percent = cpu if isinstance(cpu, int) else None
+
+        mem_total = await self.client.async_walk(OID_HP_GLOBAL_MEM_TOTAL_BYTES)
+        mem_free = await self.client.async_walk(OID_HP_GLOBAL_MEM_FREE_BYTES)
+        if mem_total:
+            # Fixed/standalone switches report a single memory slot; sum in
+            # case a modular chassis reports several.
+            total = sum(v for v in mem_total.values() if isinstance(v, int))
+            free = sum(v for v in mem_free.values() if isinstance(v, int))
+            data.mem_total_bytes = total
+            data.mem_free_bytes = free
+            data.mem_used_percent = round((total - free) / total * 100, 1) if total else None
+
+        sensor_descr = await self.client.async_walk(OID_HPICF_SENSOR_DESCR)
+        sensor_status = await self.client.async_walk(OID_HPICF_SENSOR_STATUS)
+        for suffix, descr in sensor_descr.items():
+            try:
+                index = int(suffix)
+            except ValueError:
+                continue
+            data.hw_sensors[index] = HwSensorData(
+                index=index,
+                descr=decode_text(descr) or f"Capteur {index}",
+                status=sensor_status.get(suffix),
+            )
+
+        psu_status = await self.client.async_walk(OID_HPICF_POWER_SUPPLY_STATUS)
+        for suffix, status in psu_status.items():
+            try:
+                slot = int(suffix)
+            except ValueError:
+                continue
+            data.power_supplies[slot] = PowerSupplyData(slot=slot, status=status)
+
+        temp_name = await self.client.async_walk(OID_HP_SYSTEM_AIR_NAME)
+        temp_current = await self.client.async_walk(OID_HP_SYSTEM_AIR_CURRENT_TEMP)
+        for suffix, raw_temp in temp_current.items():
+            try:
+                index = int(suffix)
+            except ValueError:
+                continue
+            data.temperatures[index] = TemperatureSensorData(
+                index=index,
+                name=decode_text(temp_name[suffix]) if temp_name.get(suffix) else None,
+                celsius=_parse_temperature(raw_temp),
+            )
 
     async def _async_fetch_fdb(self, data: ArubaSwitchData) -> None:
         fdb_port = await self.client.async_walk(OID_DOT1D_TP_FDB_PORT)
@@ -230,19 +326,16 @@ class ArubaDataUpdateCoordinator(DataUpdateCoordinator[ArubaSwitchData]):
             )
 
 
-def _normalize_poe_watts(raw: int | None) -> float | None:
-    """Best-effort normalization of the vendor per-port PoE power reading.
+_TEMPERATURE_RE = re.compile(r"-?\d+(\.\d+)?")
 
-    Some firmware/MIB revisions report this value directly in Watts, others
-    in milliwatts. There is no reliable way to tell apart without a live
-    device, so anything above what a single PoE+ port can draw (30W) is
-    assumed to be milliwatts and is converted down.
-    """
+
+def _parse_temperature(raw: Any) -> float | None:
+    """Parse hpSystemAirCurrentTemp, an OCTET STRING like b'43C'."""
     if raw is None:
         return None
-    if raw > 1000:
-        return raw / 1000
-    return float(raw)
+    text = decode_text(raw) if isinstance(raw, bytes) else str(raw)
+    match = _TEMPERATURE_RE.search(text)
+    return float(match.group()) if match else None
 
 
 def _mac_from_oid_suffix(suffix: str) -> bytes | None:

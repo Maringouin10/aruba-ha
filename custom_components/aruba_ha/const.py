@@ -81,10 +81,11 @@ OID_PETH_MAIN_PSE_CONSUMPTION_POWER = "1.3.6.1.2.1.105.1.3.1.1.4"  # mW
 
 PETH_DETECTION_DELIVERING_POWER = 3
 
-# HP-ICF-POE-MIB - vendor extension, augments pethPsePortTable with the
-# same (group, port) index. Gives actual per-port power draw in Watts.
-# Not guaranteed present on every firmware; treated as best-effort.
-OID_HPICF_POE_PORT_POWER = "1.3.6.1.4.1.11.2.14.11.5.1.1.1.1.2"  # Watts
+# HP-ICF-POE-MIB (hpicfPoePethPsePortTable) - vendor extension that AUGMENTS
+# pethPsePortTable, i.e. uses the exact same (group, port) index. Confirmed
+# against the published MIB source: hpicfPoePethPsePortActualPower reports
+# the real-time power drained by the connected PD, in milliwatts.
+OID_HPICF_POE_PORT_ACTUAL_POWER = "1.3.6.1.4.1.11.2.14.11.1.9.1.1.1.8"  # mW
 
 # BRIDGE-MIB (RFC 1493) - forwarding database, used for device tracking
 OID_DOT1D_TP_FDB_PORT = "1.3.6.1.2.1.17.4.3.1.2"
@@ -92,6 +93,42 @@ OID_DOT1D_TP_FDB_STATUS = "1.3.6.1.2.1.17.4.3.1.3"
 OID_DOT1D_BASE_PORT_IF_INDEX = "1.3.6.1.2.1.17.1.4.1.2"
 
 DOT1D_FDB_STATUS_LEARNED = 3
+
+# --- HP-ICF-OID vendor MIBs: system health (CPU, memory, fans, PSUs, temp) -
+# All confirmed against the published HP-ICF-CHASSIS / STATISTICS-MIB /
+# NETSWITCH-MIB / HP-ICF-POE-MIB sources (hp.11 -> nm.2 -> icf.14 tree).
+
+# STATISTICS-MIB: hpSwitchCpuStat (scalar, 0-100%)
+OID_HP_SWITCH_CPU_STAT = "1.3.6.1.4.1.11.2.14.11.5.1.9.6.1.0"
+
+# NETSWITCH-MIB: hpGlobalMemTable, indexed by slot
+OID_HP_GLOBAL_MEM_TOTAL_BYTES = "1.3.6.1.4.1.11.2.14.11.5.1.1.2.2.1.1.5"
+OID_HP_GLOBAL_MEM_FREE_BYTES = "1.3.6.1.4.1.11.2.14.11.5.1.1.2.2.1.1.6"
+OID_HP_GLOBAL_MEM_ALLOC_BYTES = "1.3.6.1.4.1.11.2.14.11.5.1.1.2.2.1.1.7"
+
+# HP-ICF-CHASSIS: hpicfSensorTable - generic hardware sensors (fans, etc.),
+# indexed by hpicfSensorIndex.
+OID_HPICF_SENSOR_DESCR = "1.3.6.1.4.1.11.2.14.11.1.2.6.1.7"
+OID_HPICF_SENSOR_STATUS = "1.3.6.1.4.1.11.2.14.11.1.2.6.1.4"
+
+HPICF_SENSOR_STATUS_UNKNOWN = 1
+HPICF_SENSOR_STATUS_BAD = 2
+HPICF_SENSOR_STATUS_WARNING = 3
+HPICF_SENSOR_STATUS_GOOD = 4
+HPICF_SENSOR_STATUS_NOT_PRESENT = 5
+
+# HP-ICF-CHASSIS: hpicfPowerSupplyTable, indexed by hpicfPowerSupplySlotNum.
+OID_HPICF_POWER_SUPPLY_STATUS = "1.3.6.1.4.1.11.2.14.11.1.2.11.1.2"
+
+HPICF_PSU_STATUS_OK = 1
+HPICF_PSU_STATUS_INSERTED = 2
+HPICF_PSU_STATUS_REMOVED = 3
+HPICF_PSU_STATUS_FAULTED = 4
+
+# HP-ICF-CHASSIS: hpSystemAirTempTable - one entry per temperature sensor.
+# hpSystemAirCurrentTemp is an OCTET STRING like "43C", parsed at runtime.
+OID_HP_SYSTEM_AIR_NAME = "1.3.6.1.4.1.11.2.14.11.1.2.8.1.1.2"
+OID_HP_SYSTEM_AIR_CURRENT_TEMP = "1.3.6.1.4.1.11.2.14.11.1.2.8.1.1.3"
 
 ATTR_PORT_NUMBER = "port_number"
 ATTR_IF_INDEX = "if_index"

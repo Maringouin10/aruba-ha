@@ -7,7 +7,13 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfInformation, UnitOfPower, UnitOfTime
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfInformation,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -42,6 +48,15 @@ async def async_setup_entry(
 
     if coordinator.data.poe_total_watts is not None:
         entities.append(ArubaPoeTotalPowerSensor(coordinator))
+
+    if coordinator.data.cpu_percent is not None:
+        entities.append(ArubaCpuSensor(coordinator))
+
+    if coordinator.data.mem_used_percent is not None:
+        entities.append(ArubaMemorySensor(coordinator))
+
+    for index in coordinator.data.temperatures:
+        entities.append(ArubaTemperatureSensor(coordinator, index))
 
     async_add_entities(entities)
 
@@ -221,3 +236,85 @@ class ArubaPoeTotalPowerSensor(ArubaEntity, SensorEntity):
     def native_value(self) -> float | None:
         """Return the total PoE power consumption in Watts."""
         return self.coordinator.data.poe_total_watts
+
+
+class ArubaCpuSensor(ArubaEntity, SensorEntity):
+    """CPU utilization of the switch (hpSwitchCpuStat)."""
+
+    _attr_name = "Utilisation CPU"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:chip"
+
+    def __init__(self, coordinator: ArubaDataUpdateCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_cpu"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the CPU utilization in percent."""
+        return self.coordinator.data.cpu_percent
+
+
+class ArubaMemorySensor(ArubaEntity, SensorEntity):
+    """Memory utilization of the switch (hpGlobalMemTable)."""
+
+    _attr_name = "Utilisation mémoire"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:memory"
+
+    def __init__(self, coordinator: ArubaDataUpdateCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_memory"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the memory utilization in percent."""
+        return self.coordinator.data.mem_used_percent
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return raw byte counts."""
+        data = self.coordinator.data
+        return {
+            "total_bytes": data.mem_total_bytes,
+            "free_bytes": data.mem_free_bytes,
+        }
+
+
+class ArubaTemperatureSensor(ArubaEntity, SensorEntity):
+    """A temperature probe (hpSystemAirTempTable)."""
+
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: ArubaDataUpdateCoordinator, index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._index = index
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_temp_{index}"
+
+    @property
+    def _temp(self):
+        return self.coordinator.data.temperatures.get(self._index)
+
+    @property
+    def available(self) -> bool:
+        """Return True if this temperature probe is still reported."""
+        return super().available and self._temp is not None
+
+    @property
+    def name(self) -> str:
+        """Return the entity name."""
+        temp = self._temp
+        label = (temp.name if temp else None) or f"Capteur {self._index}"
+        return f"Température {label}"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the temperature in Celsius."""
+        return self._temp.celsius if self._temp else None
