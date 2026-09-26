@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the Aruba switch",
+        "description": "Enter the address of your HP Aruba 2930F (JL260A) switch and the SNMP version to use.",
+        "data": {
+          "host": "IP address or hostname",
+          "port": "SNMP port",
+          "snmp_version": "SNMP version"
+        }
+      },
+      "v2c": {
+        "title": "SNMPv2c credentials",
+        "data": {
+          "community_read": "Community string (read)",
+          "community_write": "Community string (write, optional)"
+        }
+      },
+      "v3": {
+        "title": "SNMPv3 credentials",
+        "data": {
+          "v3_username": "Username",
+          "v3_auth_protocol": "Authentication protocol",
+          "v3_auth_key": "Authentication key",
+          "v3_priv_protocol": "Privacy protocol",
+          "v3_priv_key": "Privacy key"
+        }
+      },
+      "options": {
+        "title": "Features",
+        "data": {
+          "enable_port_control": "Allow enabling/disabling ports from Home Assistant",
+          "enable_device_tracker": "Track connected devices (MAC table)",
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the switch over SNMP. Check the IP address, port and credentials.",
+      "unknown": "Unexpected error.",
+      "auth_key_required": "An authentication key is required for this protocol.",
+      "priv_key_required": "A privacy key is required for this protocol.",
+      "priv_requires_auth": "Privacy (encryption) requires authentication to be enabled.",
+      "write_community_required": "A write community string is required to enable port control."
+    },
+    "abort": {
+      "already_configured": "This switch is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Aruba HA features",
+        "data": {
+          "enable_port_control": "Allow enabling/disabling ports from Home Assistant",
+          "enable_device_tracker": "Track connected devices (MAC table)",
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    }
+  }
+}

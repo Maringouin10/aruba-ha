@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion au switch Aruba",
+        "description": "Renseignez l'adresse du switch HP Aruba 2930F (JL260A) et la version SNMP à utiliser.",
+        "data": {
+          "host": "Adresse IP ou nom d'hôte",
+          "port": "Port SNMP",
+          "snmp_version": "Version SNMP"
+        }
+      },
+      "v2c": {
+        "title": "Identifiants SNMPv2c",
+        "data": {
+          "community_read": "Community string (lecture)",
+          "community_write": "Community string (écriture, optionnel)"
+        }
+      },
+      "v3": {
+        "title": "Identifiants SNMPv3",
+        "data": {
+          "v3_username": "Nom d'utilisateur",
+          "v3_auth_protocol": "Protocole d'authentification",
+          "v3_auth_key": "Clé d'authentification",
+          "v3_priv_protocol": "Protocole de chiffrement",
+          "v3_priv_key": "Clé de chiffrement"
+        }
+      },
+      "options": {
+        "title": "Fonctionnalités",
+        "data": {
+          "enable_port_control": "Autoriser l'activation/désactivation des ports depuis Home Assistant",
+          "enable_device_tracker": "Suivre les appareils connectés (table MAC)",
+          "scan_interval": "Intervalle d'interrogation (secondes)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de joindre le switch en SNMP. Vérifiez l'adresse IP, le port et les identifiants.",
+      "unknown": "Erreur inattendue.",
+      "auth_key_required": "Une clé d'authentification est requise pour ce protocole.",
+      "priv_key_required": "Une clé de chiffrement est requise pour ce protocole.",
+      "priv_requires_auth": "Le chiffrement (priv) nécessite une authentification (auth).",
+      "write_community_required": "Une community string en écriture est requise pour activer le contrôle des ports."
+    },
+    "abort": {
+      "already_configured": "Ce switch est déjà configuré."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fonctionnalités Aruba HA",
+        "data": {
+          "enable_port_control": "Autoriser l'activation/désactivation des ports depuis Home Assistant",
+          "enable_device_tracker": "Suivre les appareils connectés (table MAC)",
+          "scan_interval": "Intervalle d'interrogation (secondes)"
+        }
+      }
+    }
+  }
+}

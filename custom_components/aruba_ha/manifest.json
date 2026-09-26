@@ -1,0 +1,12 @@
+{
+  "domain": "aruba_ha",
+  "name": "Aruba HA (2930F / ArubaOS-Switch)",
+  "codeowners": ["@maringouin10"],
+  "config_flow": true,
+  "documentation": "https://github.com/maringouin10/aruba-ha",
+  "issue_tracker": "https://github.com/maringouin10/aruba-ha/issues",
+  "iot_class": "local_polling",
+  "integration_type": "hub",
+  "requirements": ["pysnmp>=7.1.0,<8"],
+  "version": "0.1.0"
+}
